@@ -39,7 +39,7 @@ export default function Home() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [transcriptionText, setTranscriptionText] = useState<string | null>(null);
   const [sentenceList, setSentenceList] = useState('');
-  const [language, setLanguage] = useState<'en' | 'he'>('en');
+  const [language, setLanguage] = useState<'en' | 'he'>('he');
   const [isLoading, setIsLoading] = useState(false);
   
   const audioInputRef = useRef<HTMLInputElement>(null);
@@ -432,7 +432,11 @@ export default function Home() {
                   <h2 className="text-xl font-semibold mb-4 text-slate-900 dark:text-slate-50">
                     Transcription
                   </h2>
-                  <div className="p-4 border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900 whitespace-pre-wrap text-slate-700 dark:text-slate-300 font-mono text-sm max-h-96 overflow-y-auto">
+                  <div
+                    dir={language === 'he' ? 'rtl' : 'ltr'}
+                    style={{ unicodeBidi: language === 'he' ? 'plaintext' : 'normal' }}
+                    className={`p-4 border border-slate-200 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900 whitespace-pre-wrap text-slate-700 dark:text-slate-300 font-mono text-sm max-h-96 overflow-y-auto ${language === 'he' ? 'text-right' : 'text-left'}`}
+                  >
                     {transcriptionText}
                   </div>
                 </div>
@@ -467,7 +471,9 @@ export default function Home() {
                   value={sentenceList}
                   onChange={(e) => setSentenceList(e.target.value)}
                   placeholder="One sentence per line"
-                  className="min-h-[170px] w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm outline-none transition hover:border-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  dir={language === 'he' ? 'rtl' : 'ltr'}
+                  style={{ unicodeBidi: language === 'he' ? 'plaintext' : 'normal' }}
+                  className={`min-h-[170px] w-full rounded-md border border-slate-300 bg-white px-3 py-2 shadow-sm outline-none transition hover:border-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 ${language === 'he' ? 'text-right' : 'text-left'}`}
                 />
               </div>
             </div>

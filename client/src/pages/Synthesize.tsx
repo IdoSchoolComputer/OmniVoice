@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 export default function Synthesize() {
   const [refFile, setRefFile] = useState<File | null>(null);
   const [texts, setTexts] = useState('');
+  const [language] = useState<'en' | 'he'>('he');
   const [isLoading, setIsLoading] = useState(false);
 
   const handleFile = (f: File | null) => setRefFile(f);
@@ -17,6 +18,7 @@ export default function Synthesize() {
     try {
       const form = new FormData();
       form.append('texts', texts);
+      form.append('language', language);
       if (refFile) form.append('ref_audio', refFile);
       const resp = await axios.post('/api/synthesize', form);
       const files = resp.data?.files;
@@ -76,7 +78,14 @@ export default function Synthesize() {
       </div>
       <div className="mb-4">
         <label className="block mb-2">Sentences (one per line)</label>
-        <textarea rows={6} className="w-full p-2 border rounded" value={texts} onChange={(e) => setTexts(e.target.value)} />
+        <textarea
+          rows={6}
+          value={texts}
+          onChange={(e) => setTexts(e.target.value)}
+          dir="rtl"
+          style={{ unicodeBidi: 'plaintext' }}
+          className="w-full p-2 border rounded text-right"
+        />
       </div>
       <div className="flex gap-2">
         <Button onClick={submit} disabled={isLoading}>

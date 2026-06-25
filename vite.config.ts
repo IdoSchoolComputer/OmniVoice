@@ -241,8 +241,12 @@ function vitePluginApiProxy(): Plugin {
       const backendPort = process.env.BACKEND_PORT || 3001;
       const backendUrl = `http://${backendHost}:${backendPort}`;
 
-      server.middlewares.use("/api", async (req, res, next) => {
+      server.middlewares.use(async (req, res, next) => {
         const requestedPath = (req as any).originalUrl ?? req.baseUrl + (req.url ?? "");
+        if (!requestedPath.startsWith("/api") && !requestedPath.startsWith("/tmp")) {
+          return next();
+        }
+
         const targetUrl = new URL(requestedPath, backendUrl);
         const target = targetUrl.toString();
 
