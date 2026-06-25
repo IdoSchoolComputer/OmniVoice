@@ -18,24 +18,50 @@ export default function Synthesize() {
       const form = new FormData();
       form.append('texts', texts);
       if (refFile) form.append('ref_audio', refFile);
-      const resp = await axios.post('/api/synthesize', form, {
-        responseType: 'blob',
-        headers: { 'Content-Type': 'multipart/form-data' },
+      const resp = await axios.post('/api/synthesize', form);
+      const files = resp.data?.files;
+      if (!Array.isArray(files) || files.length === 0) {
+        throw new Error('No output files returned from synthesis');
+      }
+
+      files.forEach((file: { name: string; url: string }) => {
+        const a = document.createElement('a');
+        a.href = file.url;
+        a.download = file.name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
       });
 
-      // Download the zip
-      const url = window.URL.createObjectURL(new Blob([resp.data]));
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'synth.zip';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
-      toast.success('Synthesis complete — downloaded zip');
+      toast.success(`Synthesis complete — downloaded ${files.length} file(s)`);
     } catch (err: any) {
-      console.error(err);
-      toast.error(err?.response?.data?.error || err.message || 'Synthesis failed');
+      console.error("[Synthesize] Error:", err);
+      console.error("[Synthesize] Response status:", err?.response?.status);
+
+      let responseData = err?.response?.data;
+      if (responseData instanceof Blob && typeof responseData.text === 'function') {
+        try {
+          const text = await responseData.text();
+          console.error("[Synthesize] Response text:", text);
+          responseData = text;
+          try {
+            responseData = JSON.parse(text);
+          } catch {
+            // keep raw text if JSON parse fails
+          }
+        } catch (parseErr) {
+          console.error("[Synthesize] Failed to read error blob:", parseErr);
+        }
+      }
+
+      console.error("[Synthesize] Response data:", responseData);
+      const errorMsg =
+        responseData?.error ||
+        responseData?.details ||
+        (typeof responseData === 'string' ? responseData : undefined) ||
+        err.message ||
+        'Synthesis failed';
+      toast.error(errorMsg);
     } finally {
       setIsLoading(false);
     }

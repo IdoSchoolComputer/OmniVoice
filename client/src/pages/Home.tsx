@@ -226,22 +226,50 @@ export default function Home() {
         form.append('ref_text', transcriptionText);
       }
 
-      const resp = await axios.post('/api/synthesize', form, {
-        responseType: 'blob',
+      const resp = await axios.post('/api/synthesize', form);
+      const files = resp.data?.files;
+      if (!Array.isArray(files) || files.length === 0) {
+        throw new Error('No output files returned from synthesis');
+      }
+
+      files.forEach((file: { name: string; url: string }) => {
+        const a = document.createElement('a');
+        a.href = file.url;
+        a.download = file.name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
       });
 
-      const url = window.URL.createObjectURL(new Blob([resp.data]));
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'synth.zip';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
-      toast.success('Synthesis complete — downloaded zip');
+      toast.success(`Synthesis complete — downloaded ${files.length} file(s)`);
     } catch (err: any) {
-      console.error(err);
-      toast.error(err?.response?.data?.error || err.message || 'Synthesis failed');
+      console.error("[Home] Error:", err);
+      console.error("[Home] Response status:", err?.response?.status);
+
+      let responseData = err?.response?.data;
+      if (responseData instanceof Blob && typeof responseData.text === 'function') {
+        try {
+          const text = await responseData.text();
+          console.error("[Home] Response text:", text);
+          responseData = text;
+          try {
+            responseData = JSON.parse(text);
+          } catch {
+            // keep raw text if JSON parse fails
+          }
+        } catch (parseErr) {
+          console.error("[Home] Failed to read error blob:", parseErr);
+        }
+      }
+
+      console.error("[Home] Response data:", responseData);
+      const errorMsg =
+        responseData?.error ||
+        responseData?.details ||
+        (typeof responseData === 'string' ? responseData : undefined) ||
+        err.message ||
+        'Synthesis failed';
+      toast.error(errorMsg);
     } finally {
       setIsLoading(false);
     }
@@ -446,6 +474,17 @@ export default function Home() {
             <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
               Your transcription will be used as reference text if a transcription file is loaded. The selected reference audio and language are used to generate the sentences listed above.
             </p>
+            {isLoading && (
+              <div className="mb-4 space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium text-slate-700 dark:text-slate-300">Synthesizing...</span>
+                  <span className="text-slate-500 dark:text-slate-400">In progress</span>
+                </div>
+                <div className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-blue-500 to-blue-600 rounded-full animate-pulse"></div>
+                </div>
+              </div>
+            )}
             <Button onClick={handleSynthesize} disabled={isLoading} className="w-full md:w-auto">
               {isLoading ? 'Synthesizing...' : 'Generate voice for sentences'}
             </Button>

@@ -203,7 +203,112 @@ function vitePluginStorageProxy(): Plugin {
   };
 }
 
-const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy()];
+function vitePluginAnalytics(): Plugin {
+  return {
+    name: "vite-analytics",
+    transformIndexHtml(html) {
+      const endpoint = process.env.VITE_ANALYTICS_ENDPOINT;
+      const websiteId = process.env.VITE_ANALYTICS_WEBSITE_ID;
+      if (!endpoint || !websiteId) return html;
+
+      return {
+        html,
+        tags: [
+          {
+            tag: "script",
+            attrs: {
+              defer: true,
+              src: `${endpoint.replace(/\/+$/, "")}/umami`,
+              "data-website-id": websiteId,
+            },
+            injectTo: "body",
+          },
+        ],
+      };
+    },
+  };
+}
+
+/**
+ * Vite plugin to proxy API requests to backend server
+ * Forwards /api/* requests to http://localhost:3001 (or port specified in env)
+ */
+function vitePluginApiProxy(): Plugin {
+  return {
+    name: "vite-api-proxy",
+    configureServer(server: ViteDevServer) {
+      const backendHost = process.env.BACKEND_HOST || "127.0.0.1";
+      const backendPort = process.env.BACKEND_PORT || 3001;
+      const backendUrl = `http://${backendHost}:${backendPort}`;
+
+      server.middlewares.use("/api", async (req, res, next) => {
+        const requestedPath = (req as any).originalUrl ?? req.baseUrl + (req.url ?? "");
+        const targetUrl = new URL(requestedPath, backendUrl);
+        const target = targetUrl.toString();
+
+        console.log(`[Vite Proxy] Forwarding ${req.method} ${requestedPath} to ${target}`);
+
+        try {
+          // Collect request body for non-GET requests
+          let body: Buffer | undefined;
+          if (!['GET', 'HEAD'].includes(req.method || 'GET')) {
+            body = await new Promise((resolve, reject) => {
+              const chunks: Buffer[] = [];
+              req.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+              req.on('end', () => resolve(Buffer.concat(chunks)));
+              req.on('error', reject);
+            });
+          }
+
+          const forwardReq = await fetch(target, {
+            method: req.method,
+            headers: {
+              ...Object.fromEntries(
+                Object.entries(req.headers).filter(([key]) =>
+                  !['host', 'connection', 'content-length', 'transfer-encoding'].includes(key.toLowerCase())
+                )
+              ),
+            },
+            body: body,
+          });
+
+          // Forward response headers; drop hop-by-hop headers to avoid proxy issues
+          const responseHeaders = Object.fromEntries(
+            [...forwardReq.headers].filter(
+              ([key]) => !['connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade'].includes(key.toLowerCase())
+            )
+          );
+          res.writeHead(forwardReq.status, responseHeaders);
+          
+          // Forward response body
+          if (forwardReq.body) {
+            const reader = forwardReq.body.getReader();
+            try {
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                res.write(value);
+              }
+            } finally {
+              reader.releaseLock();
+            }
+          }
+          res.end();
+        } catch (err: any) {
+          console.error(`[Vite Proxy] Error:`, err);
+          res.writeHead(502, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({
+            error: `Backend proxy error: ${err.message}`,
+            hint: `Make sure backend is running on ${backendUrl}`,
+            target,
+          }));
+        }
+      });
+    },
+  };
+}
+
+const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy(), vitePluginAnalytics(), vitePluginApiProxy()];
 
 export default defineConfig({
   plugins,
